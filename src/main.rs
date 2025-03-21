@@ -1,6 +1,6 @@
 use std::{
     thread::sleep,
-    time::{Duration, Instant, SystemTime},
+    time::{Duration, Instant},
 };
 
 use camera::Camera;
