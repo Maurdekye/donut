@@ -1,5 +1,19 @@
+use std::{
+    thread::sleep,
+    time::{Duration, Instant, SystemTime},
+};
+
+use camera::Camera;
+use crossterm::{
+    ExecutableCommand, cursor,
+    terminal::{Clear, ClearType},
+};
+use glam::{Mat3, Vec3, mat3, vec3};
+use objects::torus;
+use raymarch::RaymarchOptions;
+
 mod raymarch {
-    use glam::{Vec2, Vec2Swizzles, Vec3, vec2};
+    use glam::{Vec2Swizzles, Vec3, vec2};
 
     #[derive(Clone, Copy, Debug)]
     pub struct Ray {
@@ -17,18 +31,21 @@ mod raymarch {
         pub max_iterations: usize,
         pub far_clip: f32,
         pub epsilon: f32,
+        pub normal_epsilon: f32,
     }
 
     impl Default for RaymarchOptions {
         fn default() -> Self {
             Self {
                 max_iterations: 100,
-                far_clip: 1e10,
-                epsilon: 1e-10,
+                far_clip: 1e3,
+                epsilon: 1e-4,
+                normal_epsilon: 1e-3,
             }
         }
     }
 
+    #[allow(dead_code)]
     pub enum RaymarchResult {
         MissedScene {
             iterations: usize,
@@ -62,7 +79,7 @@ mod raymarch {
                     nearest_distance,
                 };
             } else if scene_distance < options.epsilon {
-                let offset_vec = vec2(options.epsilon, 0.0);
+                let offset_vec = vec2(options.normal_epsilon, 0.0);
                 let x = (scene)(scene_pos + offset_vec.xyy());
                 let y = (scene)(scene_pos + offset_vec.yxy());
                 let z = (scene)(scene_pos + offset_vec.yyx());
@@ -81,7 +98,7 @@ mod raymarch {
 }
 
 mod objects {
-    use glam::Vec3;
+    use glam::{Vec3, vec2};
 
     pub fn torus(
         pos: Vec3,
@@ -90,10 +107,13 @@ mod objects {
         major_radius: f32,
         minor_radius: f32,
     ) -> f32 {
-        let plane_dist = (pos - origin).project_onto(normal);
-        let plane_point = pos - normal * plane_dist;
-        let major_circle = (plane_point - origin).normalize() * major_radius;
-        (pos - major_circle).length() - minor_radius
+        let p = pos - origin;
+        let q = vec2(
+            (p - normal * p.dot(normal)).length() - major_radius,
+            p.dot(normal),
+        )
+        .length();
+        q - minor_radius
     }
 }
 
@@ -103,10 +123,11 @@ mod camera {
     use crate::raymarch::{Ray, RaymarchOptions, RaymarchResult, raymarch};
 
     pub struct Camera<const W: usize, const H: usize> {
-        origin: Vec3,
-        basis: Mat3,
+        pub origin: Vec3,
+        pub basis: Mat3,
     }
 
+    #[derive(Debug)]
     pub struct RenderResult<const W: usize, const H: usize> {
         pub depth: [[f32; W]; H],
         pub proximity: [[f32; W]; H],
@@ -166,5 +187,50 @@ mod camera {
 }
 
 fn main() {
-    println!("Hello, world!");
+    const WIDTH: usize = 60;
+    const HEIGHT: usize = 30;
+
+    let camera: Camera<WIDTH, HEIGHT> = Camera {
+        origin: vec3(0.0, 0.0, 0.0),
+        basis: mat3(Vec3::X, Vec3::Y, Vec3::Z),
+    };
+    let start = Instant::now();
+    let options = RaymarchOptions::default();
+
+    std::io::stdout().execute(Clear(ClearType::All)).unwrap();
+    loop {
+        std::io::stdout().execute(cursor::MoveTo(0, 0)).unwrap();
+        let time = Instant::now().duration_since(start).as_secs_f32();
+        let scene = |pos| {
+            let normal = vec3(0.0, 0.0, 1.0);
+            let normal = Mat3::from_axis_angle(vec3(0.0, 1.0, 0.0), time / 3.0) * normal;
+            let normal = Mat3::from_axis_angle(vec3(1.0, 0.0, 0.0), time / 10.2467) * normal;
+            let normal =
+                Mat3::from_axis_angle(vec3(0.0, 0.0, 1.0), (time / 13.2251f32).sin() * 6.0)
+                    * normal;
+            torus(pos, vec3(0.0, 0.0, 10.0), normal, 3.0, 1.0)
+        };
+        let result = camera.render(scene, &options);
+        for (depth_row, normals_row) in result.depth.into_iter().zip(result.normals) {
+            let line: String = depth_row
+                .into_iter()
+                .zip(normals_row)
+                .map(|(depth, normal)| {
+                    let mut brightness = 0.0;
+                    if depth.is_finite() {
+                        brightness = (normal.dot(vec3(0.0, -1.0, 0.0)) + 1.0) / 2.0;
+                    }
+                    match brightness {
+                        0.1..=0.25 => '.',
+                        0.25..=0.5 => '-',
+                        0.5..=0.75 => '+',
+                        0.75.. => '#',
+                        _ => ' ',
+                    }
+                })
+                .collect();
+            println!("{line}");
+        }
+        sleep(Duration::from_secs_f32(1.0 / 60.0));
+    }
 }
