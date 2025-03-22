@@ -187,8 +187,8 @@ mod camera {
 }
 
 fn main() {
-    const WIDTH: usize = 60;
-    const HEIGHT: usize = 30;
+    const WIDTH: usize = 80;
+    const HEIGHT: usize = 40;
 
     let camera: Camera<WIDTH, HEIGHT> = Camera {
         origin: vec3(0.0, 0.0, 0.0),
@@ -221,11 +221,16 @@ fn main() {
                         brightness = (normal.dot(vec3(0.0, -1.0, 0.0)) + 1.0) / 2.0;
                     }
                     match brightness {
-                        0.1..=0.25 => '.',
-                        0.25..=0.5 => '-',
-                        0.5..=0.75 => '+',
-                        0.75.. => '#',
-                        _ => ' ',
+                        0.1..=0.2 => '.',
+                        0.2..=0.3 => ',',
+                        0.3..=0.4 => '-',
+                        0.4..=0.5 => '~',
+                        0.5..=0.6 => '+',
+                        0.6..=0.7 => '=',
+                        0.7..=0.8 => '*',
+                        0.8..=0.9 => '#',
+                        0.9.. => '@',
+                        _=> ' ',
                     }
                 })
                 .collect();
